@@ -7,9 +7,12 @@ import gradio as gr
 import plotly.graph_objects as go
 import os
 
-from flywheel.generator import SyntheticDataGenerator, get_precomputed_samples
-from flywheel.filters import QualityFilterPipeline, get_precomputed_filter_results
-from flywheel.trainer import get_precomputed_training_results
+try:
+    from flywheel.generator import SyntheticDataGenerator
+    from flywheel.filters import QualityFilterPipeline
+except Exception:
+    SyntheticDataGenerator = None
+    QualityFilterPipeline = None
 
 OPENAI_KEY = os.getenv("OPENAI_API_KEY", "")
 
@@ -194,6 +197,8 @@ with gr.Blocks(css=CSS, theme=gr.themes.Base(), title="Synthetic Data Flywheel")
                 if not api_key:
                     return "<div class='card'><p class='card-body'>Enter your OpenAI API key to generate samples.</p></div>"
                 try:
+                    if SyntheticDataGenerator is None:
+                        return "<div class='card'><p class='card-body'>Backend modules not available in this environment.</p></div>"
                     generator = SyntheticDataGenerator(api_key=api_key)
                     samples = generator.generate_batch(domain=domain, n=int(n))
                     pipeline = QualityFilterPipeline(api_key=api_key)
