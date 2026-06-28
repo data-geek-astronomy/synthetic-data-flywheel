@@ -199,9 +199,9 @@ with gr.Blocks(css=CSS, theme=gr.themes.Base(), title="Synthetic Data Flywheel")
                 try:
                     if SyntheticDataGenerator is None:
                         return "<div class='card'><p class='card-body'>Backend modules not available in this environment.</p></div>"
-                    generator = SyntheticDataGenerator(api_key=api_key)
+                    generator = SyntheticDataGenerator(openai_api_key=api_key)
                     samples = generator.generate_batch(domain=domain, n=int(n))
-                    pipeline = QualityFilterPipeline(api_key=api_key)
+                    pipeline = QualityFilterPipeline(openai_api_key=api_key)
                     report = pipeline.filter_batch(samples)
                     rows = "".join([
                         f'<div style="border-bottom:1px solid rgba(255,255,255,0.05);padding:12px 0">'
