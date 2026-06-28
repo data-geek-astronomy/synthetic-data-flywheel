@@ -1,379 +1,271 @@
 """
-Synthetic Data Flywheel — Interactive Demo
-==========================================
-Generate → Filter → Fine-Tune → Evaluate → Repeat.
-Shows why quality filtering makes synthetic data work.
-
+Synthetic Data Flywheel — Professional Demo
 Author: Aravind Kumar Nalukurthi
 """
 
 import gradio as gr
-import os
-import json
 import plotly.graph_objects as go
-import plotly.express as px
-from typing import List
+import os
 
-from flywheel import (
-    SyntheticDataGenerator, QualityFilterPipeline,
-    SEED_DATA, get_precomputed_filter_results, get_precomputed_training_results,
-)
+from flywheel.generator import SyntheticDataGenerator, get_precomputed_samples
+from flywheel.filters import QualityFilterPipeline, get_precomputed_filter_results
+from flywheel.trainer import get_precomputed_training_results
 
 OPENAI_KEY = os.getenv("OPENAI_API_KEY", "")
-ENABLE_LIVE = os.getenv("ENABLE_LIVE_FLYWHEEL", "0") == "1"
 
 CSS = """
-body, .gradio-container { background: #0a0d14 !important; }
-.card { background: rgba(99,102,241,0.07); border: 1px solid rgba(99,102,241,0.3); border-radius: 12px; padding: 18px; margin: 8px 0; }
-.pass { color: #22c55e; }
-.fail { color: #ef4444; }
+* { box-sizing: border-box; }
+body, .gradio-container {
+    background: #000 !important;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif !important;
+    color: #f5f5f7 !important;
+}
+.hero { padding: 64px 32px 48px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.07); }
+.hero-badge { display: inline-block; background: rgba(48,209,88,0.12); color: #30d158; font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; padding: 5px 14px; border-radius: 20px; border: 1px solid rgba(48,209,88,0.2); margin-bottom: 22px; }
+.hero-title { font-size: 48px; font-weight: 700; color: #f5f5f7; line-height: 1.06; letter-spacing: -0.025em; margin: 0 0 18px; }
+.hero-sub { font-size: 19px; color: #86868b; max-width: 620px; margin: 0 auto; line-height: 1.55; }
+.stats-bar { display: flex; justify-content: center; gap: 48px; flex-wrap: wrap; padding: 32px; background: #0a0a0a; border-bottom: 1px solid rgba(255,255,255,0.07); }
+.stat { text-align: center; }
+.stat-val { font-size: 30px; font-weight: 700; color: #30d158; letter-spacing: -0.02em; }
+.stat-label { font-size: 12px; color: #6e6e73; margin-top: 3px; font-weight: 500; }
+.section { padding: 36px 32px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.sec-label { font-size: 12px; font-weight: 600; color: #6e6e73; letter-spacing: 0.09em; text-transform: uppercase; margin: 0 0 18px; }
+.card { background: #111; border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 22px 24px; margin-bottom: 10px; }
+.card-title { font-size: 16px; font-weight: 600; color: #f5f5f7; margin: 0 0 8px; }
+.card-body { font-size: 14px; color: #86868b; line-height: 1.6; margin: 0; }
+.filter-step { display: flex; align-items: center; gap: 16px; padding: 14px; background: #0a0a0a; border-radius: 10px; margin-bottom: 8px; }
+.filter-num { font-size: 26px; font-weight: 700; color: #f5f5f7; min-width: 60px; }
+.filter-label { font-size: 14px; color: #86868b; }
+.filter-arrow { font-size: 18px; color: #3a3a3c; margin: 0 8px; }
 footer { display: none !important; }
 """
 
-FILTER_DATA = get_precomputed_filter_results()
-TRAINING_DATA = get_precomputed_training_results()
-
-
-# ── Chart builders ────────────────────────────────────────────────────────────
-
-def build_filter_funnel_chart():
-    stages = list(FILTER_DATA["stages"].keys())
-    passed = [100] + [FILTER_DATA["stages"][s]["passed"] for s in stages]
-    stage_labels = ["Generated"] + stages
-
-    fig = go.Figure(go.Funnel(
-        y=stage_labels,
-        x=passed,
-        textinfo="value+percent initial",
-        marker=dict(
-            color=["#475569", "#6366f1", "#8b5cf6", "#a78bfa"],
-        ),
-        connector=dict(line=dict(color="#334155", width=2)),
-    ))
+def filter_funnel_chart():
+    stages = ["Generated", "Rule Filter\n(free)", "Perplexity Filter\n(DistilGPT-2)", "LLM Judge\n(GPT-4o-mini)"]
+    counts = [100, 83, 71, 64]
+    colors = ["#3a3a3c", "#48484a", "#636366", "#30d158"]
+    fig = go.Figure([go.Bar(
+        x=stages, y=counts,
+        marker_color=colors,
+        text=[f"{c} samples" for c in counts],
+        textposition="outside",
+        textfont=dict(color="#f5f5f7", size=12),
+        width=0.5,
+    )])
     fig.update_layout(
-        template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)", font=dict(color="#e2e8f0"),
-        title="Quality Filtering Funnel (100 generated → 64 kept)",
-        height=360, margin=dict(t=50, b=10),
+        template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#86868b"), yaxis=dict(range=[0, 130], gridcolor="rgba(255,255,255,0.05)", title="Samples Remaining"),
+        height=300, margin=dict(t=20, b=20), showlegend=False,
+    )
+    return fig
+
+def ppl_chart():
+    conditions = ["Baseline\n(no fine-tune)", "Real data\n(5 samples)", "Unfiltered\nsynthetic (100)", "Filtered\nsynthetic (64)", "Real +\nFiltered (69)"]
+    ppls = [45.6, 22.4, 28.2, 17.9, 15.0]
+    colors = ["#3a3a3c", "#48484a", "#ff453a", "#30d158", "#0a84ff"]
+    fig = go.Figure([go.Bar(
+        x=conditions, y=ppls,
+        marker_color=colors,
+        text=[f"{p}" for p in ppls],
+        textposition="outside",
+        textfont=dict(color="#f5f5f7", size=12),
+        width=0.5,
+    )])
+    fig.update_layout(
+        template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#86868b"),
+        yaxis=dict(title="Perplexity (lower = better)", gridcolor="rgba(255,255,255,0.05)", range=[0, 60]),
+        height=320, margin=dict(t=20, b=20), showlegend=False,
+    )
+    return fig
+
+def flywheel_chart():
+    iters = [0, 1, 2, 3]
+    ppls = [22.4, 17.9, 14.2, 12.1]
+    samples = [5, 64, 158, 310]
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=iters, y=ppls, name="Perplexity", mode="lines+markers",
+        line=dict(color="#30d158", width=2), marker=dict(size=9)))
+    fig.add_trace(go.Bar(x=iters, y=samples, name="Training Samples", yaxis="y2",
+        marker_color="rgba(10,132,255,0.2)", marker_line_color="#0a84ff", marker_line_width=1))
+    fig.update_layout(
+        template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#86868b"),
+        xaxis_title="Flywheel Iteration", xaxis=dict(tickvals=[0,1,2,3], ticktext=["Seed", "Iter 1", "Iter 2", "Iter 3"]),
+        yaxis=dict(title="Perplexity ↓", gridcolor="rgba(255,255,255,0.05)"),
+        yaxis2=dict(title="Samples ↑", overlaying="y", side="right"),
+        height=320, legend=dict(x=0.02, y=0.98), margin=dict(t=20, b=20),
     )
     return fig
 
 
-def build_quality_distribution_chart():
-    bins = FILTER_DATA["quality_distribution"]["score_bins"]
-    raw = FILTER_DATA["quality_distribution"]["counts_raw"]
-    filtered = FILTER_DATA["quality_distribution"]["counts_filtered"]
-
-    fig = go.Figure([
-        go.Bar(name="Before Filtering", x=bins, y=raw, marker_color="#475569"),
-        go.Bar(name="After Filtering", x=bins, y=filtered, marker_color="#6366f1"),
-    ])
-    fig.update_layout(
-        barmode="group", template="plotly_dark",
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color="#e2e8f0"),
-        title="Quality Score Distribution Before/After Filtering",
-        xaxis_title="Quality Score Range", yaxis_title="# Samples",
-        height=340, margin=dict(t=50, b=10),
-    )
-    return fig
-
-
-def build_training_comparison_chart():
-    conds = TRAINING_DATA["conditions"]
-    names = [c["name"] for c in conds]
-    ppl = [c["perplexity"] for c in conds]
-    colors = ["#22c55e" if c.get("highlight") else "#475569" for c in conds]
-
-    fig = go.Figure([
-        go.Bar(
-            x=names, y=ppl,
-            marker_color=colors,
-            text=[f"PPL={p:.1f}" for p in ppl],
-            textposition="outside",
-        )
-    ])
-    fig.update_layout(
-        template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)", font=dict(color="#e2e8f0"),
-        title="Eval Perplexity by Training Data Source (lower = better)",
-        yaxis_title="Perplexity (↓ better)", height=400,
-        margin=dict(t=50, b=80),
-        xaxis_tickangle=-15,
-    )
-    return fig
-
-
-def build_flywheel_iterations_chart():
-    fw = TRAINING_DATA["flywheel_iterations"]
-    fig = go.Figure([
-        go.Scatter(
-            x=fw["iter"], y=fw["eval_perplexity"],
-            mode="lines+markers",
-            line=dict(color="#6366f1", width=3),
-            marker=dict(size=10, color="#a78bfa"),
-            name="Eval Perplexity",
-        ),
-        go.Scatter(
-            x=fw["iter"], y=fw["train_samples"],
-            mode="lines+markers", yaxis="y2",
-            line=dict(color="#22c55e", width=2, dash="dot"),
-            marker=dict(size=8, color="#22c55e"),
-            name="Training Samples",
-        )
-    ])
-    fig.update_layout(
-        template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)", font=dict(color="#e2e8f0"),
-        title="Flywheel Iterations: Each Round Generates Better Data",
-        xaxis_title="Flywheel Iteration",
-        yaxis=dict(title="Eval Perplexity (↓)", color="#a78bfa"),
-        yaxis2=dict(title="Training Samples (→)", overlaying="y", side="right", color="#22c55e"),
-        height=340, legend=dict(x=0.01, y=0.99),
-        margin=dict(t=50, b=10),
-    )
-    return fig
-
-
-# ── Live pipeline ──────────────────────────────────────────────────────────────
-
-def run_live_generation(api_key: str, domain: str, n: int):
-    if not api_key:
-        return "❌ Enter API key", "", ""
-
-    generator = SyntheticDataGenerator(api_key)
-    samples = generator.generate_batch(domain, n=n)
-
-    if not samples:
-        return "❌ Generation failed — check API key", "", ""
-
-    samples_html = "".join(
-        f"""<div class='card' style='margin:6px 0'>
-            <div style='color:#64748b;font-size:0.78em'>#{i+1} · {s.domain}</div>
-            <div style='color:#a5b4fc;font-size:0.88em;margin:4px 0'><strong>Prompt:</strong> {s.prompt[:200]}</div>
-            <div style='color:#e2e8f0;font-size:0.85em'><strong>Completion:</strong> {s.completion[:300]}</div>
-        </div>"""
-        for i, s in enumerate(samples)
-    )
-
-    pipeline = QualityFilterPipeline(
-        openai_api_key=api_key,
-        use_perplexity=False,
-        use_llm_judge=True,
-        min_llm_score=3.5,
-    )
-    report = pipeline.filter_batch(samples)
-
-    passed = [s for s in report.samples if s.passed_filter]
-    failed = [s for s in report.samples if not s.passed_filter]
-
-    filter_html = f"""
-    <div class='card'>
-        <div style='display:flex;justify-content:space-between;margin-bottom:12px'>
-            <div><span style='color:#22c55e;font-size:1.4em;font-weight:700'>{report.passed}</span>
-                 <span style='color:#64748b;font-size:0.85em'> passed</span></div>
-            <div><span style='color:#ef4444;font-size:1.4em;font-weight:700'>{report.total_in - report.passed}</span>
-                 <span style='color:#64748b;font-size:0.85em'> rejected</span></div>
-            <div><span style='color:#a78bfa;font-size:1.4em;font-weight:700'>{report.pass_rate:.0%}</span>
-                 <span style='color:#64748b;font-size:0.85em'> pass rate</span></div>
-        </div>
-        {''.join(f"<div style='padding:4px 0'><span class='pass'>✓</span> <span style='color:#94a3b8;font-size:0.82em'>{s.prompt[:80]}...</span></div>" for s in passed[:3])}
-        {''.join(f"<div style='padding:4px 0'><span class='fail'>✗</span> <span style='color:#64748b;font-size:0.78em'>{s.filter_reason}</span></div>" for s in failed[:3])}
-    </div>
-    """
-
-    stats_html = f"""
-    <div class='card'>
-        <div style='color:#94a3b8;font-size:0.85em'>
-            Generated: {report.total_in} · Passed: {report.passed} ·
-            Rejected length: {report.rejected_length} ·
-            Rejected duplicate: {report.rejected_duplicate} ·
-            Rejected LLM judge: {report.rejected_llm_judge}
-        </div>
-    </div>
-    """
-
-    return samples_html, filter_html, stats_html
-
-
-# ── Gradio App ─────────────────────────────────────────────────────────────────
-
-with gr.Blocks(css=CSS, theme=gr.themes.Soft(primary_hue="violet"), title="Synthetic Data Flywheel") as demo:
+with gr.Blocks(css=CSS, theme=gr.themes.Base(), title="Synthetic Data Flywheel") as demo:
 
     gr.HTML("""
-    <div style='text-align:center;padding:28px 0 18px'>
-        <div style='font-size:2.8em'>🔄</div>
-        <h1 style='color:#e2e8f0;margin:10px 0 6px;font-size:1.9em;font-weight:700'>
-            Synthetic Data Flywheel
-        </h1>
-        <p style='color:#64748b;max-width:720px;margin:0 auto;line-height:1.6'>
-            Generate synthetic training data with GPT-4o → quality filter with 3-stage pipeline →
-            fine-tune DistilGPT-2 → prove filtered synthetic beats unfiltered and matches real data.
+    <div class="hero">
+        <div class="hero-badge">AI Engineering · Data + Fine-Tuning</div>
+        <h1 class="hero-title">Synthetic Data Flywheel</h1>
+        <p class="hero-sub">
+            Getting real training data is expensive. This project generates synthetic data using GPT-4o-mini,
+            filters it through three quality stages, fine-tunes a language model on it, and feeds the
+            improved model back to generate better data — a self-improving loop.
         </p>
+    </div>
+    <div class="stats-bar">
+        <div class="stat"><div class="stat-val">64%</div><div class="stat-label">Data surviving all filters</div></div>
+        <div class="stat"><div class="stat-val">PPL 17.9</div><div class="stat-label">Filtered synthetic (vs 28.2 unfiltered)</div></div>
+        <div class="stat"><div class="stat-val">PPL 15.0</div><div class="stat-label">Real + synthetic combined</div></div>
+        <div class="stat"><div class="stat-val">1</div><div class="stat-label">API key needed (OpenAI)</div></div>
     </div>
     """)
 
     with gr.Tabs():
 
-        with gr.Tab("🔄 Live Pipeline"):
-            gr.HTML("""<div class='card'><p style='color:#94a3b8;margin:0'>
-            Generate synthetic training samples live, then run quality filters on them.</p></div>""")
-            with gr.Row():
-                api_key = gr.Textbox(label="OpenAI API Key", type="password", value=OPENAI_KEY, scale=3)
-                domain_select = gr.Dropdown(
-                    choices=["instruction_following", "code_generation", "summarization"],
-                    value="instruction_following", label="Domain", scale=1,
-                )
-                n_samples = gr.Slider(5, 20, value=10, step=5, label="Generate N samples", scale=1)
-
-            gen_btn = gr.Button("🚀 Generate + Filter", variant="primary", size="lg")
-            gen_display = gr.HTML(value="<div class='card'>Click Generate to begin.</div>")
-            filter_display = gr.HTML()
-            stats_display = gr.HTML()
-
-            gen_btn.click(
-                fn=run_live_generation,
-                inputs=[api_key, domain_select, n_samples],
-                outputs=[gen_display, filter_display, stats_display],
-            )
-
-        with gr.Tab("🔬 Filter Analysis"):
-            gr.HTML(f"""
-            <div class='card'>
-                <div style='display:flex;gap:30px;flex-wrap:wrap'>
-                    <div style='text-align:center'>
-                        <div style='color:#6366f1;font-size:2em;font-weight:700'>100</div>
-                        <div style='color:#64748b;font-size:0.82em'>Generated</div>
-                    </div>
-                    <div style='text-align:center'>
-                        <div style='color:#22c55e;font-size:2em;font-weight:700'>64</div>
-                        <div style='color:#64748b;font-size:0.82em'>Passed All Filters</div>
-                    </div>
-                    <div style='text-align:center'>
-                        <div style='color:#ef4444;font-size:2em;font-weight:700'>36</div>
-                        <div style='color:#64748b;font-size:0.82em'>Rejected</div>
-                    </div>
-                    <div style='text-align:center'>
-                        <div style='color:#a78bfa;font-size:2em;font-weight:700'>{FILTER_DATA["final_pass_rate"]:.0%}</div>
-                        <div style='color:#64748b;font-size:0.82em'>Pass Rate</div>
-                    </div>
+        with gr.Tab("Overview"):
+            gr.HTML("""
+            <div class="section">
+                <div class="sec-label">The idea</div>
+                <div class="card">
+                    <div class="card-title">The synthetic data problem</div>
+                    <p class="card-body">You can generate unlimited training data using a powerful LLM — but raw synthetic data often hurts model quality. It can be repetitive, contain subtle errors, or drift toward LLM-sounding outputs rather than genuine instruction-following. The key insight: filtering synthetic data changes everything.</p>
+                </div>
+                <div class="card">
+                    <div class="card-title">Critical finding</div>
+                    <p class="card-body">
+                        <span style="color:#ff453a">Unfiltered synthetic data: PPL=28.2 — worse than no fine-tuning</span><br>
+                        <span style="color:#30d158">Filtered synthetic data: PPL=17.9 — beats real data alone (22.4)</span><br>
+                        <span style="color:#0a84ff">Combined real + filtered: PPL=15.0 — best result</span>
+                    </p>
+                </div>
+                <div class="card">
+                    <div class="card-title">The flywheel</div>
+                    <p class="card-body">After the first fine-tune, use the improved model to generate better seed examples. Then filter and fine-tune again. Each iteration produces more data and lower perplexity: Iter 0 (PPL 22.4) → Iter 1 (17.9) → Iter 2 (14.2) → Iter 3 (12.1).</p>
+                </div>
+                <div class="card" style="border-color:rgba(48,209,88,0.25)">
+                    <div class="card-title" style="color:#30d158">How to explore</div>
+                    <p class="card-body">No API key: Go to "Filter Pipeline" and "Training Results" for pre-computed charts.<br>With API key: Go to "Generate Samples" to run the actual generation + filtering pipeline.</p>
                 </div>
             </div>
             """)
-            with gr.Row():
-                gr.Plot(build_filter_funnel_chart())
-                gr.Plot(build_quality_distribution_chart())
 
-            # Breakdown table
-            breakdown_html = "<div class='card'><h4 style='color:#a5b4fc;margin:0 0 12px'>Rejection Breakdown by Stage</h4>"
-            for stage, data in FILTER_DATA["stages"].items():
-                breakdown_html += f"""
-                <div style='background:#111827;border-radius:8px;padding:10px;margin:6px 0;display:flex;justify-content:space-between'>
-                    <div style='color:#e2e8f0;font-weight:600'>{stage}</div>
-                    <div style='text-align:right'>
-                        <span style='color:#ef4444'>{data["rejected"]} rejected</span>
-                        <span style='color:#64748b;margin:0 8px'>·</span>
-                        <span style='color:#22c55e'>{data["passed"]} passed</span>
-                        <span style='color:#64748b;margin:0 8px'>·</span>
-                        <span style='color:#64748b;font-size:0.82em'>{data["cost"]}</span>
-                    </div>
-                </div>"""
-            breakdown_html += "</div>"
-            gr.HTML(breakdown_html)
-
-        with gr.Tab("📊 Training Comparison"):
-            gr.HTML(f"""
-            <div class='card'>
-                <h4 style='color:#a5b4fc;margin:0 0 12px'>Experiment: {TRAINING_DATA["task"]}</h4>
-                <div style='color:#94a3b8;font-size:0.85em'>
-                    Model: {TRAINING_DATA["model"]} · Eval set: {TRAINING_DATA["eval_set"]}
+        with gr.Tab("Filter Pipeline"):
+            gr.HTML('<div class="section" style="padding-bottom:0"><div class="sec-label">3-stage quality filter — 100 samples → 64 pass all stages</div></div>')
+            gr.Plot(filter_funnel_chart())
+            gr.HTML("""
+            <div class="section">
+                <div class="card">
+                    <div class="card-title">Stage 1 — Rule-Based Filter (free)</div>
+                    <p class="card-body">Removes samples that are too short/long, exact duplicates (MD5 hash), or contain boilerplate ("As an AI language model", "I cannot", "I'm sorry but"). Catches 17% of generated samples. Zero cost.</p>
+                </div>
+                <div class="card">
+                    <div class="card-title">Stage 2 — Perplexity Filter (DistilGPT-2)</div>
+                    <p class="card-body">Computes perplexity with a small local model. Low perplexity (&lt;150) = fluent, natural text. High perplexity = weird phrasing, likely low quality. Removes another 12 samples. Runs locally, no API cost.</p>
+                </div>
+                <div class="card">
+                    <div class="card-title">Stage 3 — LLM Judge (GPT-4o-mini)</div>
+                    <p class="card-body">GPT-4o-mini scores each sample on 4 criteria: accuracy, clarity, helpfulness, format. Minimum score 3.5/5 required. Removes final 7 samples. This stage costs API credits but is the most accurate quality signal.</p>
                 </div>
             </div>
             """)
-            with gr.Row():
-                gr.Plot(build_training_comparison_chart())
-                gr.Plot(build_flywheel_iterations_chart())
 
-            # Key findings
-            findings_html = "<div class='card'><h4 style='color:#a5b4fc;margin:0 0 12px'>Key Findings</h4>"
-            for finding in TRAINING_DATA["key_findings"]:
-                emoji = "⚠️" if "WORSE" in finding or "hurts" in finding else "✅"
-                findings_html += f"<div style='color:#94a3b8;font-size:0.88em;padding:6px 0'>{emoji} {finding}</div>"
-            findings_html += "</div>"
-            gr.HTML(findings_html)
+        with gr.Tab("Training Results"):
+            gr.HTML('<div class="section" style="padding-bottom:0"><div class="sec-label">Fine-tuning perplexity — DistilGPT-2 on 5 conditions</div></div>')
+            gr.Plot(ppl_chart())
+            gr.HTML('<div class="section" style="padding-bottom:0"><div class="sec-label">Flywheel iterations — data compounds over time</div></div>')
+            gr.Plot(flywheel_chart())
+            gr.HTML("""
+            <div class="section">
+                <div class="card">
+                    <div class="card-title">What perplexity means</div>
+                    <p class="card-body">Perplexity measures how well a language model predicts text — lower is better. Baseline (no fine-tune) = 45.6. Fine-tuning on 5 real samples brings it to 22.4. Filtering synthetic data beats that at 17.9 despite zero real data.</p>
+                </div>
+            </div>
+            """)
 
-        with gr.Tab("🏗️ Architecture"):
+        with gr.Tab("Generate Samples"):
+            gr.HTML('<div class="section" style="padding-bottom:12px"><div class="sec-label">Live generation + filtering — requires OpenAI API key</div></div>')
+            api_key = gr.Textbox(label="OpenAI API Key", type="password", value=OPENAI_KEY)
+            domain = gr.Dropdown(choices=["instruction_following", "code_generation", "summarization"], value="instruction_following", label="Domain")
+            n_samples = gr.Slider(minimum=5, maximum=20, value=10, step=5, label="Samples to generate")
+            gen_btn = gr.Button("Generate & Filter", variant="primary")
+            gen_out = gr.HTML()
+
+            def run_generation(api_key, domain, n):
+                if not api_key:
+                    return "<div class='card'><p class='card-body'>Enter your OpenAI API key to generate samples.</p></div>"
+                try:
+                    generator = SyntheticDataGenerator(api_key=api_key)
+                    samples = generator.generate_batch(domain=domain, n=int(n))
+                    pipeline = QualityFilterPipeline(api_key=api_key)
+                    report = pipeline.filter_batch(samples)
+                    rows = "".join([
+                        f'<div style="border-bottom:1px solid rgba(255,255,255,0.05);padding:12px 0">'
+                        f'<div style="display:flex;justify-content:space-between"><div style="font-size:13px;color:#f5f5f7">{s.prompt[:100]}...</div>'
+                        f'<div style="font-size:12px;color:{"#30d158" if s.passed_filter else "#ff453a"};margin-left:12px;white-space:nowrap">{"Pass" if s.passed_filter else "Filtered"}</div></div>'
+                        f'<div style="font-size:12px;color:#6e6e73;margin-top:4px">Score: {s.quality_score:.2f} · PPL: {s.perplexity:.1f}</div>'
+                        f'</div>'
+                        for s in samples
+                    ])
+                    return f"""
+                    <div class="card">
+                        <div class="card-title">Results: {report.passed}/{report.total} passed ({report.passed/report.total*100:.0f}%)</div>
+                        {rows}
+                    </div>"""
+                except Exception as e:
+                    return f"<div class='card'><p class='card-body' style='color:#ff453a'>Error: {e}</p></div>"
+
+            gen_btn.click(fn=run_generation, inputs=[api_key, domain, n_samples], outputs=gen_out)
+
+        with gr.Tab("How It Works"):
             gr.Markdown("""
-## The Synthetic Data Flywheel
+## The Flywheel Loop
 
 ```
-Iteration 0:
-  Seed data (5-50 real examples)
-      ↓
-  GPT-4o generates N synthetic examples (diverse variations)
-      ↓
-  Quality Filters:
-    1. Rule-based (length, dedup, boilerplate) — free
-    2. Perplexity filter (DistilGPT-2) — fast, local
-    3. LLM Judge (GPT-4o-mini) — accurate, ~$0.001/sample
-      ↓
-  Fine-tune DistilGPT-2 on filtered data
-      ↓
-Iteration 1:
-  Use fine-tuned model to generate better seeds
-      ↓
-  Repeat → each iteration improves quality
+10 seed examples (human-written)
+        ↓
+GPT-4o-mini generates 100 synthetic samples
+        ↓
+Stage 1: Rule-based filter → 83 remain
+Stage 2: Perplexity filter (DistilGPT-2) → 71 remain
+Stage 3: LLM judge (GPT-4o-mini) → 64 remain (64% pass rate)
+        ↓
+Fine-tune DistilGPT-2 on 64 filtered samples
+        ↓
+Use fine-tuned model to generate better seeds → repeat
 ```
 
-## Why Quality Filtering is the Secret Sauce
+## Perplexity Filter
 
-Without filtering, synthetic data contains:
-- **Repetitions**: model regenerates variations of the same fact
-- **Hallucinations**: plausible-sounding but wrong facts
-- **Format errors**: completions that ignore the expected format
-- **Boilerplate**: "As an AI language model..." style refusals
+```python
+def compute_perplexity(self, text: str) -> float:
+    inputs = self.tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
+    with torch.no_grad():
+        outputs = self.model(**inputs, labels=inputs["input_ids"])
+    return torch.exp(outputs.loss).item()  # PPL = exp(cross-entropy loss)
+```
 
-**Filter effectiveness on 100 generated samples:**
+## LLM Judge Rubric
 
-| Stage | Rejected | What It Catches |
-|---|---|---|
-| Rule-based | 17 | Duplicates (8), too short (6), boilerplate (3) |
-| Perplexity | 12 | High-noise, off-topic, or incoherent text |
-| LLM Judge | 7 | Wrong facts, poor format, unclear explanations |
+```python
+RUBRIC = """Rate this training sample on 4 criteria (1-5 each):
+1. Accuracy — is the response factually correct?
+2. Clarity — is it easy to understand?
+3. Helpfulness — does it actually help with the task?
+4. Format — appropriate length and structure?
 
-## Perplexity as a Quality Signal
+Return: {"scores": [s1, s2, s3, s4], "average": avg, "keep": true/false}
+"""
+```
 
-DistilGPT-2 perplexity on the completion text:
-- **PPL < 2**: Suspiciously low — likely trivial or repeated phrase
-- **PPL 5–80**: Normal range — coherent, informative text
-- **PPL > 150**: High noise — garbled, off-topic, or hallucinated
+## Key Insight
 
-We compute perplexity on the **completion only**, not the prompt.
-We care about output quality, not question difficulty.
+Filtering cost (~$0.01 per sample with GPT-4o-mini) is far cheaper than
+the cost of training on bad data (gradient steps wasted, model degradation).
+The 36% filter rate is not waste — it's quality control.
 
-## Goodhart's Law Warning
-
-If you over-rely on synthetic data:
-1. You're training on GPT-4o's distribution, not the real world
-2. The model learns GPT-4o's failure modes
-3. Reinforcement of errors — the flywheel amplifies mistakes
-
-Mitigation: always hold out real evaluation data, use diverse seeds,
-and cap the synthetic-to-real ratio (~10:1 is typical).
-
-## Practical Results
-
-| Data | # Samples | Perplexity | BLEU |
-|---|---|---|---|
-| No fine-tuning | 0 | 45.6 | 0.08 |
-| Real only | 5 | 22.4 | 0.19 |
-| Synthetic (unfiltered) | 100 | 28.2 | 0.14 |
-| Synthetic (filtered) | 64 | **17.9** | **0.27** |
-| Real + Synthetic | 69 | **15.0** | **0.33** |
-
-**The key result**: Filtered synthetic (64 samples) beats real-only (5 samples)
-by 20% on perplexity, despite having 12.8x more training examples — because
-filtering matters more than quantity.
+## References
+- Self-Instruct ([arxiv 2212.10560](https://arxiv.org/abs/2212.10560))
+- Phi-1: Textbooks Are All You Need ([arxiv 2306.11644](https://arxiv.org/abs/2306.11644))
             """)
 
 demo.launch()
