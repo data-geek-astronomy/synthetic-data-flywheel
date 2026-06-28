@@ -213,7 +213,7 @@ with gr.Blocks(css=CSS, theme=gr.themes.Base(), title="Synthetic Data Flywheel")
                     ])
                     return f"""
                     <div class="card">
-                        <div class="card-title">Results: {report.passed}/{report.total} passed ({report.passed/report.total*100:.0f}%)</div>
+                        <div class="card-title">Results: {report.passed}/{report.total_in} passed ({report.pass_rate*100:.0f}%)</div>
                         {rows}
                     </div>"""
                 except Exception as e:
