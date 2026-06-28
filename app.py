@@ -1,5 +1,5 @@
 """
-Synthetic Data Flywheel — Professional Demo
+Synthetic Data Flywheel - Professional Demo
 Author: Aravind Kumar Nalukurthi
 """
 
@@ -111,7 +111,7 @@ with gr.Blocks(css=CSS, theme=gr.themes.Base(), title="Synthetic Data Flywheel")
         <p class="hero-sub">
             Getting real training data is expensive. This project generates synthetic data using GPT-4o-mini,
             filters it through three quality stages, fine-tunes a language model on it, and feeds the
-            improved model back to generate better data — a self-improving loop.
+            improved model back to generate better data - a self-improving loop.
         </p>
     </div>
     <div class="stats-bar">
@@ -130,14 +130,14 @@ with gr.Blocks(css=CSS, theme=gr.themes.Base(), title="Synthetic Data Flywheel")
                 <div class="sec-label">The idea</div>
                 <div class="card">
                     <div class="card-title">The synthetic data problem</div>
-                    <p class="card-body">You can generate unlimited training data using a powerful LLM — but raw synthetic data often hurts model quality. It can be repetitive, contain subtle errors, or drift toward LLM-sounding outputs rather than genuine instruction-following. The key insight: filtering synthetic data changes everything.</p>
+                    <p class="card-body">You can generate unlimited training data using a powerful LLM - but raw synthetic data often hurts model quality. It can be repetitive, contain subtle errors, or drift toward LLM-sounding outputs rather than genuine instruction-following. The key insight: filtering synthetic data changes everything.</p>
                 </div>
                 <div class="card">
                     <div class="card-title">Critical finding</div>
                     <p class="card-body">
-                        <span style="color:#ff453a">Unfiltered synthetic data: PPL=28.2 — worse than no fine-tuning</span><br>
-                        <span style="color:#30d158">Filtered synthetic data: PPL=17.9 — beats real data alone (22.4)</span><br>
-                        <span style="color:#0a84ff">Combined real + filtered: PPL=15.0 — best result</span>
+                        <span style="color:#ff453a">Unfiltered synthetic data: PPL=28.2 - worse than no fine-tuning</span><br>
+                        <span style="color:#30d158">Filtered synthetic data: PPL=17.9 - beats real data alone (22.4)</span><br>
+                        <span style="color:#0a84ff">Combined real + filtered: PPL=15.0 - best result</span>
                     </p>
                 </div>
                 <div class="card">
@@ -152,41 +152,41 @@ with gr.Blocks(css=CSS, theme=gr.themes.Base(), title="Synthetic Data Flywheel")
             """)
 
         with gr.Tab("Filter Pipeline"):
-            gr.HTML('<div class="section" style="padding-bottom:0"><div class="sec-label">3-stage quality filter — 100 samples → 64 pass all stages</div></div>')
+            gr.HTML('<div class="section" style="padding-bottom:0"><div class="sec-label">3-stage quality filter - 100 samples → 64 pass all stages</div></div>')
             gr.Plot(filter_funnel_chart())
             gr.HTML("""
             <div class="section">
                 <div class="card">
-                    <div class="card-title">Stage 1 — Rule-Based Filter (free)</div>
+                    <div class="card-title">Stage 1 - Rule-Based Filter (free)</div>
                     <p class="card-body">Removes samples that are too short/long, exact duplicates (MD5 hash), or contain boilerplate ("As an AI language model", "I cannot", "I'm sorry but"). Catches 17% of generated samples. Zero cost.</p>
                 </div>
                 <div class="card">
-                    <div class="card-title">Stage 2 — Perplexity Filter (DistilGPT-2)</div>
+                    <div class="card-title">Stage 2 - Perplexity Filter (DistilGPT-2)</div>
                     <p class="card-body">Computes perplexity with a small local model. Low perplexity (&lt;150) = fluent, natural text. High perplexity = weird phrasing, likely low quality. Removes another 12 samples. Runs locally, no API cost.</p>
                 </div>
                 <div class="card">
-                    <div class="card-title">Stage 3 — LLM Judge (GPT-4o-mini)</div>
+                    <div class="card-title">Stage 3 - LLM Judge (GPT-4o-mini)</div>
                     <p class="card-body">GPT-4o-mini scores each sample on 4 criteria: accuracy, clarity, helpfulness, format. Minimum score 3.5/5 required. Removes final 7 samples. This stage costs API credits but is the most accurate quality signal.</p>
                 </div>
             </div>
             """)
 
         with gr.Tab("Training Results"):
-            gr.HTML('<div class="section" style="padding-bottom:0"><div class="sec-label">Fine-tuning perplexity — DistilGPT-2 on 5 conditions</div></div>')
+            gr.HTML('<div class="section" style="padding-bottom:0"><div class="sec-label">Fine-tuning perplexity - DistilGPT-2 on 5 conditions</div></div>')
             gr.Plot(ppl_chart())
-            gr.HTML('<div class="section" style="padding-bottom:0"><div class="sec-label">Flywheel iterations — data compounds over time</div></div>')
+            gr.HTML('<div class="section" style="padding-bottom:0"><div class="sec-label">Flywheel iterations - data compounds over time</div></div>')
             gr.Plot(flywheel_chart())
             gr.HTML("""
             <div class="section">
                 <div class="card">
                     <div class="card-title">What perplexity means</div>
-                    <p class="card-body">Perplexity measures how well a language model predicts text — lower is better. Baseline (no fine-tune) = 45.6. Fine-tuning on 5 real samples brings it to 22.4. Filtering synthetic data beats that at 17.9 despite zero real data.</p>
+                    <p class="card-body">Perplexity measures how well a language model predicts text - lower is better. Baseline (no fine-tune) = 45.6. Fine-tuning on 5 real samples brings it to 22.4. Filtering synthetic data beats that at 17.9 despite zero real data.</p>
                 </div>
             </div>
             """)
 
         with gr.Tab("Generate Samples"):
-            gr.HTML('<div class="section" style="padding-bottom:12px"><div class="sec-label">Live generation + filtering — requires OpenAI API key</div></div>')
+            gr.HTML('<div class="section" style="padding-bottom:12px"><div class="sec-label">Live generation + filtering - requires OpenAI API key</div></div>')
             api_key = gr.Textbox(label="OpenAI API Key", type="password", value=OPENAI_KEY)
             domain = gr.Dropdown(choices=["instruction_following", "code_generation", "summarization"], value="instruction_following", label="Domain")
             n_samples = gr.Slider(minimum=5, maximum=20, value=10, step=5, label="Samples to generate")
@@ -222,55 +222,34 @@ with gr.Blocks(css=CSS, theme=gr.themes.Base(), title="Synthetic Data Flywheel")
             gen_btn.click(fn=run_generation, inputs=[api_key, domain, n_samples], outputs=gen_out)
 
         with gr.Tab("How It Works"):
-            gr.Markdown("""
-## The Flywheel Loop
-
-```
-10 seed examples (human-written)
-        ↓
-GPT-4o-mini generates 100 synthetic samples
-        ↓
-Stage 1: Rule-based filter → 83 remain
-Stage 2: Perplexity filter (DistilGPT-2) → 71 remain
-Stage 3: LLM judge (GPT-4o-mini) → 64 remain (64% pass rate)
-        ↓
-Fine-tune DistilGPT-2 on 64 filtered samples
-        ↓
-Use fine-tuned model to generate better seeds → repeat
-```
-
-## Perplexity Filter
-
-```python
-def compute_perplexity(self, text: str) -> float:
-    inputs = self.tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
-    with torch.no_grad():
-        outputs = self.model(**inputs, labels=inputs["input_ids"])
-    return torch.exp(outputs.loss).item()  # PPL = exp(cross-entropy loss)
-```
-
-## LLM Judge Rubric
-
-```python
-RUBRIC = """Rate this training sample on 4 criteria (1-5 each):
-1. Accuracy — is the response factually correct?
-2. Clarity — is it easy to understand?
-3. Helpfulness — does it actually help with the task?
-4. Format — appropriate length and structure?
-
-Return: {"scores": [s1, s2, s3, s4], "average": avg, "keep": true/false}
-"""
-```
-
-## Key Insight
-
-Filtering cost (~$0.01 per sample with GPT-4o-mini) is far cheaper than
-the cost of training on bad data (gradient steps wasted, model degradation).
-The 36% filter rate is not waste — it's quality control.
-
-## References
-- Self-Instruct ([arxiv 2212.10560](https://arxiv.org/abs/2212.10560))
-- Phi-1: Textbooks Are All You Need ([arxiv 2306.11644](https://arxiv.org/abs/2306.11644))
-            """)
+            gr.Markdown(
+                "## The Flywheel Loop\n\n"
+                "```\n"
+                "10 seed examples (human-written)\n"
+                "  -> GPT-4o-mini generates 100 synthetic samples\n"
+                "  -> Stage 1: Rule-based filter  -> 83 remain\n"
+                "  -> Stage 2: Perplexity filter  -> 71 remain\n"
+                "  -> Stage 3: LLM judge          -> 64 remain (64% pass rate)\n"
+                "  -> Fine-tune DistilGPT-2 on 64 samples\n"
+                "  -> Use improved model to generate better seeds -> repeat\n"
+                "```\n\n"
+                "## Perplexity Filter\n\n"
+                "```python\n"
+                "def compute_perplexity(self, text):\n"
+                "    inputs = self.tokenizer(text, return_tensors='pt', truncation=True)\n"
+                "    with torch.no_grad():\n"
+                "        outputs = self.model(**inputs, labels=inputs['input_ids'])\n"
+                "    return torch.exp(outputs.loss).item()\n"
+                "```\n\n"
+                "## LLM Judge Rubric\n\n"
+                "Score each sample 1-5 on: Accuracy, Clarity, Helpfulness, Format.\n"
+                "Minimum average score: **3.5 / 5** to pass the filter.\n\n"
+                "## Key Insight\n\n"
+                "Filtering cost (~$0.01/sample with GPT-4o-mini) is cheaper than training on bad data.\n"
+                "The 36% filter rate is quality control, not waste.\n\n"
+                "## References\n"
+                "- Self-Instruct: arxiv.org/abs/2212.10560\n"
+                "- Phi-1 Textbooks Are All You Need: arxiv.org/abs/2306.11644\n"
+            )
 
 demo.launch()
